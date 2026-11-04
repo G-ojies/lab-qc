@@ -1,11 +1,16 @@
 {
-  "name": "action-rovo",
+  "name": "labqc",
   "version": "2.0.36-next.1",
-  "description": "a sample app that defines a rovo agent and actions",
+  "description": "Lab QC: Westgard multirule quality control for clinical labs, on Jira",
   "main": "index.js",
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "@forge/api": "^8.4.0-next.4"
+    "@forge/api": "^8.4.0-next.4",
+    "@forge/bridge": "^7.2.1",
+    "@forge/kvs": "^2.1.1",
+    "@forge/react": "^12.4.0",
+    "@forge/resolver": "^2.0.2",
+    "react": "^18.3.1"
   }
 }

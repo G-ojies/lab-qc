@@ -78,11 +78,23 @@ modules:
       actions:
         - fetch-comments
         - add-comment
+  jira:globalPage:
+    - key: labqc-page
+      title: Lab QC
+      resource: qc-page
+      resolver:
+        function: qc-resolver
+      render: native
   function:
+    - key: qc-resolver
+      handler: resolvers/qc.handler
     - key: fetchComments
       handler: index.fetchComments
     - key: addCommentToIssue
       handler: index.addComment
+resources:
+  - key: qc-page
+    path: src/frontend/index.jsx
 app:
   runtime:
     name: nodejs24.x
@@ -93,3 +105,4 @@ permissions:
   scopes:
     - write:jira-work
     - read:jira-work
+    - storage:app
