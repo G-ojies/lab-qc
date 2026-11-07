@@ -1,83 +1,137 @@
 modules:
   action:
-    - key: fetch-comments
-      name: Fetch Comments from an Issue
-      function: fetchComments
-      description: Fetches comments from an issue.
-      inputs:
-        issueId:
-          title: Issue Id
-          type: string
-          description: The issue id for the Jira issue id that the comments are being
-            retrieved for.
-          required: true
+    - key: check-qc-status
+      name: Check QC status
+      function: checkQcStatus
       actionVerb: GET
-    - key: add-comment
-      name: Add Comment on an Issue
-      function: addCommentToIssue
-      description: adds comment on an issue.
+      description: Says whether an analyser is in control for a test, from the latest Westgard QC verdict, with the rules that fired and any results to hold.
       inputs:
-        issueId:
-          title: Issue Id
+        analyser:
+          title: Analyser
           type: string
-          description: The issue id for the Jira issue id where a comments needs to be added
-          required: true
-        comment:
-          title: Comment
+          description: Analyser name or model as the user said it, e.g. "C-311", "BS-240", "cobas". Leave empty if not given.
+          required: false
+        test:
+          title: Test
           type: string
-          description: The comment that needs to be added to the issue
-          required: true
+          description: Test (analyte) name as the user said it, e.g. "glucose", "ALT", "haemoglobin". Leave empty if not given.
+          required: false
+    - key: get-hold-window
+      name: Get patient-result hold window
+      function: getHoldWindow
+      actionVerb: GET
+      description: For a rejected QC run, gives the patient-result hold window, the rules that failed and the corrective action status.
+      inputs:
+        analyser:
+          title: Analyser
+          type: string
+          description: Analyser name or model as the user said it, e.g. "C-311", "BS-240", "cobas". Leave empty if not given.
+          required: false
+        test:
+          title: Test
+          type: string
+          description: Test (analyte) name as the user said it, e.g. "glucose", "ALT", "haemoglobin". Leave empty if not given.
+          required: false
+        runId:
+          title: Run id
+          type: string
+          description: A specific QC run id, only if the user or an earlier answer gave one. Otherwise leave empty to use the newest rejected run.
+          required: false
+    - key: open-corrective-action
+      name: Open QC corrective action
+      function: openCaAction
       actionVerb: CREATE
+      description: For a rejected QC run, creates a Jira corrective-action work item and a linked Confluence incident page. Never releases results.
+      inputs:
+        analyser:
+          title: Analyser
+          type: string
+          description: Analyser name or model as the user said it, e.g. "C-311", "BS-240", "cobas". Leave empty if not given.
+          required: false
+        test:
+          title: Test
+          type: string
+          description: Test (analyte) name as the user said it, e.g. "glucose", "ALT", "haemoglobin". Leave empty if not given.
+          required: false
+        runId:
+          title: Run id
+          type: string
+          description: A specific QC run id, only if the user or an earlier answer gave one. Otherwise leave empty to use the newest rejected run.
+          required: false
   rovo:agent:
-    - key: labqc-hello-world-agent
-      name: labqc
-      description: A simple agent to demonstrate the use of actions.
+    - key: qc-officer
+      name: QC Officer
+      description: Clinical lab QC assistant. Checks Westgard QC verdicts, gives patient-result hold windows and opens corrective actions.
       prompt: >
-        You are a helpful agent that demonstrates how to use actions.
+        You are QC Officer, a quality control assistant for a clinical laboratory. Bench scientists ask you
+        whether an analyser is in control for a test, which patient results to hold after a QC failure, and to
+        open corrective actions.
 
 
-        You can perform the following jobs:
+        Rules you always follow:
 
-        a. Summarise comments on an issue
+        1. Every QC verdict comes from your actions, which run the Westgard multirules on the stored QC data.
+        Never judge QC values yourself, never guess a verdict, and never change one because the user disagrees.
+        Quote the verdict, the rules and the times exactly as the action returns them.
 
-        b. Add a comment to an issue
+        2. You never release patient results and never say results may be released after a reject. Release is a
+        human sign-off by an authorised scientist on the Confluence incident page. If asked to release results,
+        say so and point to the incident page.
+
+        3. When the user names an analyser or test, pass their words to the action as given (for example
+        analyser "C-311", test "glucose"). If an action says the words match several tests, ask which one.
 
 
-        I'll separate the instructions for each job with a. '---' on a new line,
-        followed by the job title.
-
-
-        ---
-
-        a. Summarise comments on an issue
-
-        To do this, follow these steps:
-
-        1. If there is not an issue key in the context, ask for one
-
-        2. fetch the comments using the fetch-comments action
-
-        3. summarize the comments
-
-        4. return the summary to the user
+        Jobs:
 
         ---
 
-        b. Add a comment to an issue
+        a. Is analyser X OK for test Y?
 
-        To do this, follow these steps:
+        Call check-qc-status with the analyser and test the user named (either may be empty). Answer in one or
+        two sentences first (in control, warning, or out of control), then the latest run time and the rules.
+        If QC is out of control, say patient results must be held and offer the hold window and a corrective
+        action. If the latest QC run is more than 24 hours old, say QC should be run before reporting.
 
-        1. If the user hasn't provided a comment, ask for one
+        ---
 
-        2. If there is not an issue key in the context, ask for one
+        b. Which patient results do I hold?
 
-        3. Add the comment to the issue using the add-comment action
+        Call get-hold-window. Give the window (from and to), the rules that failed, and whether a corrective
+        action is already open. Remind the user that the window starts at the last accepted run and may need
+        extending if the investigation dates the cause earlier.
+
+        ---
+
+        c. Open a corrective action
+
+        Call open-corrective-action for the rejected run. Return the Jira work item key and link and the
+        Confluence incident page link. Tell the user the next steps are on the work item checklist and that
+        release of held results is their sign-off on the incident page.
       conversationStarters:
-        - add a comment to this issue
-        - summarise the comments on this issue
+        - Is the cobas c 311 OK for cholesterol this morning?
+        - Which patient results do I hold for the creatinine reject?
+        - Open a corrective action for the latest glucose reject
       actions:
-        - fetch-comments
-        - add-comment
+        - check-qc-status
+        - get-hold-window
+        - open-corrective-action
+  rovo:mcp:
+    - key: labqc-mcp
+      name: Lab QC
+      tools:
+        - check-qc-status
+        - get-hold-window
+        - open-corrective-action
+  rovo:skill:
+    - key: lab-qc-skill
+      source:
+        dir: skills/lab-qc
+      dependencies:
+        tools:
+          - check-qc-status
+          - get-hold-window
+          - open-corrective-action
   jira:globalPage:
     - key: labqc-page
       title: Lab QC
@@ -88,10 +142,12 @@ modules:
   function:
     - key: qc-resolver
       handler: resolvers/qc.handler
-    - key: fetchComments
-      handler: index.fetchComments
-    - key: addCommentToIssue
-      handler: index.addComment
+    - key: checkQcStatus
+      handler: agent.checkQcStatus
+    - key: getHoldWindow
+      handler: agent.getHoldWindow
+    - key: openCaAction
+      handler: agent.openCorrectiveActionAction
 resources:
   - key: qc-page
     path: src/frontend/index.jsx
