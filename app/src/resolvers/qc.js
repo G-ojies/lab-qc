@@ -3,7 +3,7 @@ import Resolver from '@forge/resolver';
 import { kvs } from '@forge/kvs';
 import { evaluateRun, holdWindow } from '../lib/westgard';
 import { ANALYTES, demoResults } from '../lib/demo';
-import { INDEX_KEY, MAX_RESULTS, detail, loadAll, loadOne, openCorrectiveAction, recordKey, saveOne, summarise } from '../qc-core';
+import { INDEX_KEY, MAX_RESULTS, detail, getConfig, loadAll, loadOne, openCorrectiveAction, recordKey, saveOne, setConfig, summarise } from '../qc-core';
 
 const resolver = new Resolver();
 
@@ -56,5 +56,9 @@ resolver.define('openCorrectiveAction', async ({ payload }) => {
   if (!record) return { error: 'Analyte not found' };
   return openCorrectiveAction(record, payload.runId);
 });
+
+/** Where corrective actions go: read, and save after checking the project and space exist. */
+resolver.define('getConfig', () => getConfig());
+resolver.define('setConfig', ({ payload }) => setConfig(payload || {}));
 
 export const handler = resolver.getDefinitions();

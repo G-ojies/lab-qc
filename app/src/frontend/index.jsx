@@ -278,6 +278,71 @@ function AnalyteDetail({ detail, onAdded }) {
   );
 }
 
+/**
+ * Where "Open corrective action" creates its Jira work item and Confluence page. Collapsed by default; on a new
+ * site (a judge's, for example) set an existing project and space here. The backend checks both exist.
+ */
+function SettingsPanel() {
+  const [open, setOpen] = useState(false);
+  const [config, setConfig] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const { handleSubmit, register, getFieldId } = useForm();
+
+  const show = async () => {
+    setOpen(true);
+    setConfig(await invoke('getConfig'));
+  };
+  const save = async (values) => {
+    setBusy(true);
+    const res = await invoke('setConfig', {
+      projectKey: values.projectKey || config.projectKey,
+      spaceKey: values.spaceKey || config.spaceKey,
+      issueType: values.issueType || config.issueType,
+    });
+    setBusy(false);
+    setResult(res);
+    if (res.config) setConfig(res.config);
+  };
+
+  if (!open)
+    return (
+      <Inline>
+        <Button appearance="subtle" onClick={show}>Corrective action settings</Button>
+      </Inline>
+    );
+  if (!config) return <Spinner label="Loading settings" />;
+  return (
+    <Stack space="space.100">
+      <Heading size="small">Corrective action settings</Heading>
+      <Text>{`Work items go to Jira project ${config.projectKey} as "${config.issueType}"; incident pages go to Confluence space ${config.spaceKey}. Leave a field empty to keep it.`}</Text>
+      <Form onSubmit={handleSubmit(save)}>
+        <FormSection>
+          <Inline space="space.200" alignBlock="end">
+            <Box>
+              <Label labelFor={getFieldId('projectKey')}>Jira project key</Label>
+              <Textfield id="projectKey" placeholder={config.projectKey} {...register('projectKey')} />
+            </Box>
+            <Box>
+              <Label labelFor={getFieldId('spaceKey')}>Confluence space key</Label>
+              <Textfield id="spaceKey" placeholder={config.spaceKey} {...register('spaceKey')} />
+            </Box>
+            <Box>
+              <Label labelFor={getFieldId('issueType')}>Work type</Label>
+              <Textfield id="issueType" placeholder={config.issueType} {...register('issueType')} />
+            </Box>
+          </Inline>
+        </FormSection>
+        <FormFooter align="start">
+          <LoadingButton appearance="primary" type="submit" isLoading={busy}>Check and save</LoadingButton>
+        </FormFooter>
+      </Form>
+      {result && result.error && <SectionMessage appearance="error"><Text>{result.error}</Text></SectionMessage>}
+      {result && result.config && <SectionMessage appearance="success"><Text>Saved. Both were found.</Text></SectionMessage>}
+    </Stack>
+  );
+}
+
 const App = () => {
   const [dashboard, setDashboard] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -355,6 +420,7 @@ const App = () => {
               Reset to demo month
             </LoadingButton>
           </Inline>
+          <SettingsPanel />
         </Stack>
       )}
     </Stack>

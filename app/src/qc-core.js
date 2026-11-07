@@ -79,6 +79,42 @@ async function json(res, what) {
   throw new Error(`${what} failed (${res.status}): ${body.slice(0, 300)}`);
 }
 
+/** The project and space corrective actions go to (defaults merged with any saved override). */
+export async function getConfig() {
+  return { ...DEFAULT_CONFIG, ...((await kvs.get(CONFIG_KEY)) || {}) };
+}
+
+/**
+ * Save where corrective actions go, after checking as the user that the Jira project and Confluence space exist,
+ * so a typo shows up here and not halfway through opening a corrective action.
+ */
+export async function setConfig({ projectKey, spaceKey, issueType }) {
+  const cfg = {
+    projectKey: String(projectKey || '').trim().toUpperCase(),
+    spaceKey: String(spaceKey || '').trim(),
+    issueType: String(issueType || DEFAULT_CONFIG.issueType).trim(),
+  };
+  if (!cfg.projectKey || !cfg.spaceKey) return { error: 'Enter a Jira project key and a Confluence space key.' };
+  try {
+    const project = await json(
+      await api.asUser().requestJira(route`/rest/api/3/project/${cfg.projectKey}?expand=issueTypes`),
+      `Finding Jira project ${cfg.projectKey}`,
+    );
+    const types = (project.issueTypes || []).filter((t) => !t.subtask).map((t) => t.name);
+    if (types.length && !types.includes(cfg.issueType))
+      return { error: `Project ${cfg.projectKey} has no "${cfg.issueType}" work type. It has: ${types.join(', ')}.` };
+    const spaces = await json(
+      await api.asUser().requestConfluence(route`/wiki/api/v2/spaces?keys=${cfg.spaceKey}`),
+      `Finding Confluence space ${cfg.spaceKey}`,
+    );
+    if (!spaces.results?.length) return { error: `Confluence space ${cfg.spaceKey} not found. Is the app installed in Confluence too?` };
+  } catch (e) {
+    return { error: e.message };
+  }
+  await kvs.set(CONFIG_KEY, cfg);
+  return { config: cfg };
+}
+
 /** The incident input for one rejected run, in the shape lib/incident.js expects. */
 export function incidentInput(record, runId) {
   const mine = record.results.filter((r) => r.runId === runId);
@@ -110,7 +146,7 @@ export async function openCorrectiveAction(record, runId) {
   if (record.actions?.[runId]) return { action: record.actions[runId], existing: true };
   const input = incidentInput(record, runId);
   if (!input) return { error: 'Only a rejected run gets a corrective action.' };
-  const cfg = { ...DEFAULT_CONFIG, ...((await kvs.get(CONFIG_KEY)) || {}) };
+  const cfg = await getConfig();
 
   try {
     const { baseUrl } = await json(await api.asUser().requestJira(route`/rest/api/3/serverInfo`), 'Reading the Jira site');
