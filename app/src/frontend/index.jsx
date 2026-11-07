@@ -20,6 +20,7 @@ import ForgeReconciler, {
   Inline,
   Label,
   LineChart,
+  Link,
   LoadingButton,
   Lozenge,
   SectionMessage,
@@ -92,6 +93,44 @@ function ruleText(run) {
   return run.violations.map((v) => `${v.rule}: ${v.detail}`).join('; ');
 }
 
+/**
+ * Corrective action for one rejected run: links to the Jira work item and Confluence incident page once they
+ * exist, otherwise a button that opens both (as the signed-in user).
+ */
+function CorrectiveAction({ analyteKey, runId, action, onOpened }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [opened, setOpened] = useState(action);
+
+  if (opened) {
+    return (
+      <Inline space="space.100">
+        <Link href={opened.issueUrl} openNewTab>{opened.issueKey}</Link>
+        <Link href={opened.pageUrl} openNewTab>Incident page</Link>
+      </Inline>
+    );
+  }
+  const openIt = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await invoke('openCorrectiveAction', { key: analyteKey, runId });
+    setBusy(false);
+    if (res.error) setError(res.error);
+    else {
+      setOpened(res.action);
+      if (onOpened) onOpened();
+    }
+  };
+  return (
+    <Stack space="space.050">
+      <LoadingButton appearance="warning" isLoading={busy} onClick={openIt}>
+        Open corrective action
+      </LoadingButton>
+      {error && <Text>{error}</Text>}
+    </Stack>
+  );
+}
+
 function Dashboard({ analytes, onOpen, selectedKey }) {
   const head = {
     cells: [
@@ -124,7 +163,7 @@ function Dashboard({ analytes, onOpen, selectedKey }) {
   return <DynamicTable caption="Analytes under QC" head={head} rows={rows} />;
 }
 
-function RunsTable({ detail }) {
+function RunsTable({ detail, onChanged }) {
   const levels = Object.keys(detail.levels);
   const head = {
     cells: [
@@ -133,6 +172,7 @@ function RunsTable({ detail }) {
       { key: 'status', content: 'Verdict' },
       { key: 'rules', content: 'Rules fired' },
       { key: 'hold', content: 'Hold patient results' },
+      { key: 'action', content: 'Corrective action' },
     ],
   };
   const rows = detail.runs.map((run) => ({
@@ -145,6 +185,15 @@ function RunsTable({ detail }) {
       {
         key: 'hold',
         content: run.hold ? `${run.hold.from ? when(run.hold.from) : 'start of record'} to ${when(run.hold.to)}` : '',
+      },
+      {
+        key: 'action',
+        content:
+          run.status === 'reject' ? (
+            <CorrectiveAction analyteKey={detail.key} runId={run.runId} action={run.action} onOpened={onChanged} />
+          ) : (
+            ''
+          ),
       },
     ],
   }));
@@ -192,6 +241,9 @@ function AddRunForm({ detail, onAdded }) {
           {result.hold && (
             <Text>{`Hold patient results reported from ${result.hold.from ? when(result.hold.from) : 'the start of the record'} to ${when(result.hold.to)}. Release stays a human decision.`}</Text>
           )}
+          {result.verdict.status === 'reject' && (
+            <CorrectiveAction analyteKey={detail.key} runId={result.verdict.runId} action={null} onOpened={onAdded} />
+          )}
         </SectionMessage>
       )}
     </Form>
@@ -221,7 +273,7 @@ function AnalyteDetail({ detail, onAdded }) {
       />
       <Heading size="small">Log a QC run</Heading>
       <AddRunForm detail={detail} onAdded={onAdded} />
-      <RunsTable detail={detail} />
+      <RunsTable detail={detail} onChanged={onAdded} />
     </Stack>
   );
 }
